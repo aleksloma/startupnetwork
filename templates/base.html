@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}StartupNetwork{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-image: url('/static/network.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+        }
+        .startup-icon {
+            cursor: move;
+            transition: transform 0.2s;
+        }
+        .startup-icon:hover {
+            transform: scale(1.1);
+        }
+        .centroid {
+            pointer-events: none;
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="min-h-screen">
+    <!-- Navbar -->
+    <nav class="glass border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <!-- Left: Logo/Brand -->
+                <div class="flex items-center">
+                    <a href="/" class="text-2xl font-bold text-blue-600">
+                        StartupNetwork
+                    </a>
+                    {% if current_user and current_user.is_admin %}
+                    <a href="/admin" class="ml-8 text-gray-700 hover:text-blue-600">
+                        Admin
+                    </a>
+                    {% endif %}
+                </div>
+
+                <!-- Right: Auth/Actions -->
+                <div class="flex items-center space-x-4">
+                    {% if current_user %}
+                        <span class="text-gray-700">
+                            {{ current_user.username }}
+                            {% if current_user.is_admin %}
+                                <span class="ml-1 px-2 py-1 text-xs bg-red-100 text-red-800 rounded">Admin</span>
+                            {% endif %}
+                        </span>
+                        <a href="/startup/new" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                            Add Startup
+                        </a>
+                        <form method="post" action="/logout" class="inline">
+                            <button type="submit" class="text-gray-700 hover:text-blue-600">
+                                Logout
+                            </button>
+                        </form>
+                    {% else %}
+                        <a href="/login" class="text-gray-700 hover:text-blue-600">
+                            Login
+                        </a>
+                        <a href="/signup" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                            Sign Up
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    {% block content %}{% endblock %}
+
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,620 @@
+{% extends "base.html" %}
+
+{% block title %}StartupNetwork - Network Map{% endblock %}
+
+{% block extra_head %}
+<style>
+    #network-map {
+        position: relative;
+        width: 100%;
+        height: 85vh;
+        min-height: 700px;
+        background-image: url('/static/network.jpg');
+        background-size: cover;
+        background-position: center;
+        overflow: hidden;
+    }
+    .startup-icon {
+        position: absolute;
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: white;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        cursor: pointer;
+        user-select: none;
+        transition: transform 0.2s;
+    }
+    .startup-icon:hover {
+        transform: scale(1.1);
+        z-index: 100;
+    }
+    .startup-icon img {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+    .startup-initials {
+        font-size: 24px;
+        font-weight: bold;
+    }
+    .startup-label {
+        position: absolute;
+        bottom: -25px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(255, 255, 255, 0.95);
+        padding: 4px 8px;
+        border-radius: 4px;
+        white-space: nowrap;
+        font-size: 12px;
+        font-weight: 600;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    .field-label {
+        position: absolute;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-weight: bold;
+        font-size: 14px;
+        color: white;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        cursor: default;
+        user-select: none;
+        border: 2px solid rgba(255, 255, 255, 0.5);
+    }
+    .field-label.draggable {
+        cursor: move;
+    }
+    .field-chip-container {
+        background: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(10px);
+        padding: 12px 20px;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Field Filter Chips (lightweight, no big container) -->
+<div class="field-chip-container">
+    <div class="max-w-7xl mx-auto">
+        <div class="flex flex-wrap gap-2" id="field-filters">
+            <!-- Populated by JavaScript -->
+        </div>
+    </div>
+</div>
+
+<!-- Network Map (full width, no extra container) -->
+<div id="network-map">
+    <!-- Field labels and startup icons populated by JavaScript -->
+</div>
+
+<!-- Startup Detail Modal -->
+<div id="startup-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50" style="display: none;">
+    <div class="glass rounded-lg max-w-2xl w-full mx-4 p-6 max-h-[90vh] overflow-y-auto">
+        <div id="modal-content">
+            <!-- Populated by JavaScript -->
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let startups = [];
+let fields = [];
+let selectedFields = new Set();
+let currentUser = {{ 'true' if current_user else 'false' }};
+let isAdmin = {{ 'true' if current_user and current_user.is_admin else 'false' }};
+let username = {% if current_user %}"{{ current_user.username }}"{% else %}null{% endif %};
+
+// Centroid positions - will be loaded from fields data
+let centroidPositions = {};
+
+// Load data
+async function loadFields() {
+    try {
+        const response = await fetch('/api/fields');
+        if (!response.ok) {
+            console.error('Failed to load fields:', response.status);
+            return;
+        }
+        fields = await response.json();
+        console.log('Loaded fields:', fields.length);
+
+        // Build centroid positions from fields data
+        fields.forEach(field => {
+            if (field.x !== undefined && field.y !== undefined) {
+                centroidPositions[field.name] = { x: field.x, y: field.y };
+            }
+        });
+
+        renderFieldFilters();
+    } catch (error) {
+        console.error('Error loading fields:', error);
+    }
+}
+
+async function loadStartups() {
+    try {
+        const response = await fetch('/api/startups');
+        if (!response.ok) {
+            console.error('Failed to load startups:', response.status);
+            return;
+        }
+        let allStartups = await response.json();
+        console.log('Loaded startups:', allStartups.length);
+
+        // Filter by selected fields on client side
+        if (selectedFields.size > 0) {
+            startups = allStartups.filter(s =>
+                s.fields.some(f => selectedFields.has(f))
+            );
+        } else {
+            startups = allStartups;
+        }
+
+        renderMap();
+    } catch (error) {
+        console.error('Error loading startups:', error);
+    }
+}
+
+// Render field filter chips
+function renderFieldFilters() {
+    const container = document.getElementById('field-filters');
+    container.innerHTML = fields.map(field => `
+        <button
+            onclick="toggleField('${field.name}')"
+            class="px-4 py-2 rounded-lg border-2 transition field-chip"
+            data-field="${field.name}"
+            style="border-color: ${field.color};"
+        >
+            ${field.name}
+        </button>
+    `).join('');
+}
+
+function toggleField(fieldName) {
+    if (selectedFields.has(fieldName)) {
+        selectedFields.delete(fieldName);
+    } else {
+        selectedFields.add(fieldName);
+    }
+
+    // Update UI
+    document.querySelectorAll('.field-chip').forEach(chip => {
+        const field = chip.dataset.field;
+        if (selectedFields.has(field)) {
+            chip.classList.add('bg-blue-100');
+        } else {
+            chip.classList.remove('bg-blue-100');
+        }
+    });
+
+    loadStartups();
+}
+
+// Render network map
+function renderMap() {
+    const mapElement = document.getElementById('network-map');
+    if (!mapElement) {
+        console.error('Map element not found!');
+        return;
+    }
+
+    const rect = mapElement.getBoundingClientRect();
+    const width = rect.width;
+    const height = rect.height;
+
+    console.log('Rendering map - width:', width, 'height:', height);
+    console.log('Fields:', fields.length, 'Startups:', startups.length);
+    console.log('Is admin:', isAdmin, 'Current user:', username);
+
+    // Clear map
+    mapElement.innerHTML = '';
+
+    // Render field labels (instead of circles)
+    let fieldCount = 0;
+    fields.forEach(field => {
+        if (centroidPositions[field.name]) {
+            const pos = centroidPositions[field.name];
+            const fieldLabel = document.createElement('div');
+            fieldLabel.className = 'field-label' + (isAdmin ? ' draggable' : '');
+            fieldLabel.dataset.field = field.name;
+            fieldLabel.style.left = `${pos.x}%`;
+            fieldLabel.style.top = `${pos.y}%`;
+            fieldLabel.style.transform = 'translate(-50%, -50%)';
+            fieldLabel.style.backgroundColor = field.color;
+            fieldLabel.style.borderColor = field.color;
+            fieldLabel.textContent = field.name;
+
+            // Make draggable for admin
+            if (isAdmin) {
+                makeFieldDraggable(fieldLabel, field);
+            }
+
+            mapElement.appendChild(fieldLabel);
+            fieldCount++;
+        }
+    });
+
+    console.log('Rendered field labels:', fieldCount);
+
+    // Render startups
+    let startupCount = 0;
+    startups.forEach(startup => {
+        renderStartup(startup, mapElement, width, height);
+        startupCount++;
+    });
+
+    console.log('Rendered startups:', startupCount);
+}
+
+function renderStartup(startup, mapElement, width, height) {
+    const icon = document.createElement('div');
+    icon.className = 'startup-icon';
+    icon.dataset.id = startup.id;
+
+    // Calculate position
+    let x, y;
+    if (startup.position && startup.position.x !== 0 && startup.position.y !== 0) {
+        x = startup.position.x;
+        y = startup.position.y;
+    } else {
+        // Position near primary field centroid
+        const primaryField = startup.fields[0];
+        const centroid = centroidPositions[primaryField];
+        if (centroid) {
+            x = centroid.x + (Math.random() - 0.5) * 10;
+            y = centroid.y + (Math.random() - 0.5) * 10;
+        } else {
+            x = 50 + (Math.random() - 0.5) * 20;
+            y = 50 + (Math.random() - 0.5) * 20;
+        }
+    }
+
+    icon.style.left = `${x}%`;
+    icon.style.top = `${y}%`;
+    icon.style.transform = 'translate(-50%, -50%)';
+
+    // Apply field colors to icon border
+    const fieldColors = startup.fields.map(fieldName => {
+        const field = fields.find(f => f.name === fieldName);
+        return field ? field.color : '#3B82F6';
+    });
+
+    if (fieldColors.length === 1) {
+        icon.style.border = `4px solid ${fieldColors[0]}`;
+    } else if (fieldColors.length === 2) {
+        // Two-color gradient border
+        icon.style.border = '4px solid transparent';
+        icon.style.backgroundImage = `linear-gradient(white, white), linear-gradient(135deg, ${fieldColors[0]} 50%, ${fieldColors[1]} 50%)`;
+        icon.style.backgroundOrigin = 'padding-box, border-box';
+        icon.style.backgroundClip = 'padding-box, border-box';
+    }
+
+    // Icon content
+    if (startup.logoPath) {
+        icon.innerHTML = `<img src="/data/logos/${startup.logoPath}" alt="${startup.startupName}">`;
+    } else {
+        const initials = getInitials(startup.startupName);
+        const initialsColor = fieldColors[0] || '#3B82F6';
+        icon.innerHTML = `<span class="startup-initials" style="color: ${initialsColor};">${initials}</span>`;
+    }
+
+    // Label
+    const label = document.createElement('div');
+    label.className = 'startup-label';
+    label.textContent = startup.startupName;
+    icon.appendChild(label);
+
+    // Make draggable for owner/admin
+    let isDraggableIcon = currentUser && (username === startup.owner_username || isAdmin);
+    if (isDraggableIcon) {
+        makeDraggable(icon, startup);
+    }
+
+    // Click to view details (always enabled, but drag handler will prevent if dragging)
+    icon.addEventListener('click', (e) => {
+        // If this icon is draggable, the drag handler will prevent this from firing during drag
+        // For non-draggable icons, this always works
+        showStartupModal(startup);
+    });
+
+    mapElement.appendChild(icon);
+}
+
+function getInitials(name) {
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    } else if (parts.length === 1) {
+        return parts[0].substring(0, 2).toUpperCase();
+    }
+    return 'ST';
+}
+
+// Draggable functionality for startups
+function makeDraggable(element, startup) {
+    let isDragging = false;
+    let hasMoved = false;
+    let startX, startY, startLeft, startTop;
+
+    element.addEventListener('mousedown', (e) => {
+        if (e.target.tagName === 'IMG' || e.target.classList.contains('startup-initials')) {
+            // Start potential drag
+            startX = e.clientX;
+            startY = e.clientY;
+            const rect = element.getBoundingClientRect();
+            const parent = element.parentElement.getBoundingClientRect();
+            startLeft = ((rect.left + rect.width / 2 - parent.left) / parent.width) * 100;
+            startTop = ((rect.top + rect.height / 2 - parent.top) / parent.height) * 100;
+
+            // Wait for movement before considering it a drag
+            hasMoved = false;
+            isDragging = false;
+            e.preventDefault();
+        }
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (startX !== undefined && startY !== undefined) {
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            // Only start dragging if moved more than 5 pixels
+            if (distance > 5 && !isDragging) {
+                isDragging = true;
+                hasMoved = true;
+                element.style.cursor = 'grabbing';
+            }
+
+            if (isDragging) {
+                const parent = element.parentElement.getBoundingClientRect();
+                const dxPercent = ((e.clientX - startX) / parent.width) * 100;
+                const dyPercent = ((e.clientY - startY) / parent.height) * 100;
+                const newLeft = Math.max(5, Math.min(95, startLeft + dxPercent));
+                const newTop = Math.max(5, Math.min(95, startTop + dyPercent));
+                element.style.left = `${newLeft}%`;
+                element.style.top = `${newTop}%`;
+            }
+        }
+    });
+
+    document.addEventListener('mouseup', async (e) => {
+        if (isDragging && hasMoved) {
+            element.style.cursor = 'move';
+
+            // Save position
+            const parent = element.parentElement.getBoundingClientRect();
+            const rect = element.getBoundingClientRect();
+            const x = ((rect.left + rect.width / 2 - parent.left) / parent.width) * 100;
+            const y = ((rect.top + rect.height / 2 - parent.top) / parent.height) * 100;
+
+            try {
+                await fetch(`/api/startups/${startup.id}/position`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ x, y })
+                });
+                console.log('Saved startup position:', startup.startupName, x, y);
+            } catch (error) {
+                console.error('Error saving position:', error);
+            }
+
+            // Prevent click event from firing after drag
+            setTimeout(() => {
+                hasMoved = false;
+            }, 10);
+        } else {
+            hasMoved = false;
+        }
+
+        // Reset drag state
+        isDragging = false;
+        startX = undefined;
+        startY = undefined;
+    });
+
+    // Prevent click if we just dragged
+    element.addEventListener('click', (e) => {
+        if (hasMoved) {
+            e.stopPropagation();
+            e.preventDefault();
+        }
+    }, true);
+}
+
+// Draggable functionality for field labels (admin only)
+function makeFieldDraggable(element, field) {
+    let isDragging = false;
+    let hasMoved = false;
+    let startX, startY, startLeft, startTop;
+
+    element.addEventListener('mousedown', (e) => {
+        // Start potential drag
+        startX = e.clientX;
+        startY = e.clientY;
+        const rect = element.getBoundingClientRect();
+        const parent = element.parentElement.getBoundingClientRect();
+        startLeft = ((rect.left + rect.width / 2 - parent.left) / parent.width) * 100;
+        startTop = ((rect.top + rect.height / 2 - parent.top) / parent.height) * 100;
+
+        hasMoved = false;
+        isDragging = false;
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (startX !== undefined && startY !== undefined) {
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            // Only start dragging if moved more than 5 pixels
+            if (distance > 5 && !isDragging) {
+                isDragging = true;
+                hasMoved = true;
+                element.style.cursor = 'grabbing';
+            }
+
+            if (isDragging) {
+                const parent = element.parentElement.getBoundingClientRect();
+                const dxPercent = ((e.clientX - startX) / parent.width) * 100;
+                const dyPercent = ((e.clientY - startY) / parent.height) * 100;
+                const newLeft = Math.max(5, Math.min(95, startLeft + dxPercent));
+                const newTop = Math.max(5, Math.min(95, startTop + dyPercent));
+                element.style.left = `${newLeft}%`;
+                element.style.top = `${newTop}%`;
+            }
+        }
+    });
+
+    document.addEventListener('mouseup', async (e) => {
+        if (isDragging && hasMoved) {
+            element.style.cursor = 'move';
+
+            // Save position
+            const parent = element.parentElement.getBoundingClientRect();
+            const rect = element.getBoundingClientRect();
+            const x = ((rect.left + rect.width / 2 - parent.left) / parent.width) * 100;
+            const y = ((rect.top + rect.height / 2 - parent.top) / parent.height) * 100;
+
+            // Update local centroid position
+            centroidPositions[field.name] = { x, y };
+
+            // Save to backend
+            try {
+                await fetch(`/api/fields/${encodeURIComponent(field.name)}/position`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ x, y })
+                });
+                console.log('Saved field position:', field.name, x, y);
+            } catch (error) {
+                console.error('Error saving field position:', error);
+            }
+        }
+
+        // Reset drag state
+        isDragging = false;
+        hasMoved = false;
+        startX = undefined;
+        startY = undefined;
+    });
+}
+
+// Modal
+function showStartupModal(startup) {
+    const modal = document.getElementById('startup-modal');
+    const content = document.getElementById('modal-content');
+
+    const cofounderHtml = startup.cofounder ? `
+        <div class="mt-4">
+            <h4 class="font-semibold text-gray-700">Co-Founder</h4>
+            <p class="text-gray-600">${startup.cofounder.name}</p>
+            <a href="${startup.cofounder.linkedinUrl}" target="_blank" class="text-blue-600 hover:underline">
+                Connect on LinkedIn →
+            </a>
+        </div>
+    ` : '';
+
+    const logoHtml = startup.logoPath ? `
+        <img src="/data/logos/${startup.logoPath}" alt="${startup.startupName}" class="w-32 h-32 rounded-lg object-cover">
+    ` : `
+        <div class="w-32 h-32 rounded-lg bg-blue-100 flex items-center justify-center text-4xl font-bold text-blue-600">
+            ${getInitials(startup.startupName)}
+        </div>
+    `;
+
+    const canEdit = currentUser && (username === startup.owner_username || isAdmin);
+    const canDelete = isAdmin;
+
+    const actionButtons = canEdit ? `
+        <div class="mt-6 flex gap-2">
+            <a href="/startup/${startup.id}/edit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                Edit
+            </a>
+            ${canDelete ? `
+                <form method="post" action="/startup/${startup.id}/delete" onsubmit="return confirm('Delete this startup?')">
+                    <button type="submit" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                        Delete
+                    </button>
+                </form>
+            ` : ''}
+        </div>
+    ` : '';
+
+    content.innerHTML = `
+        <div class="flex justify-between items-start mb-4">
+            <h2 class="text-2xl font-bold text-gray-900">${startup.startupName}</h2>
+            <button onclick="closeModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+        </div>
+
+        <div class="flex gap-6 mb-6">
+            ${logoHtml}
+            <div class="flex-1">
+                <p class="text-lg text-gray-600 italic">"${startup.goalOneSentence}"</p>
+                ${startup.websiteUrl ? `
+                    <a href="${startup.websiteUrl}" target="_blank" class="text-blue-600 hover:underline mt-2 inline-block">
+                        Visit Website →
+                    </a>
+                ` : ''}
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <h4 class="font-semibold text-gray-700 mb-2">Description</h4>
+            <p class="text-gray-600">${startup.canvasIdeaDescription}</p>
+        </div>
+
+        <div class="mb-4">
+            <h4 class="font-semibold text-gray-700 mb-2">Fields</h4>
+            <div class="flex gap-2">
+                ${startup.fields.map(field => {
+                    const fieldData = fields.find(f => f.name === field);
+                    const color = fieldData ? fieldData.color : '#3B82F6';
+                    return `<span class="px-3 py-1 rounded-full text-white text-sm" style="background-color: ${color};">${field}</span>`;
+                }).join('')}
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <h4 class="font-semibold text-gray-700">Founder</h4>
+            <p class="text-gray-600">${startup.founder.name}</p>
+            <a href="${startup.founder.linkedinUrl}" target="_blank" class="text-blue-600 hover:underline">
+                Connect on LinkedIn →
+            </a>
+        </div>
+
+        ${cofounderHtml}
+        ${actionButtons}
+    `;
+
+    modal.style.display = 'flex';
+}
+
+function closeModal() {
+    document.getElementById('startup-modal').style.display = 'none';
+}
+
+// Click outside modal to close
+document.getElementById('startup-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'startup-modal') {
+        closeModal();
+    }
+});
+
+// Initialize
+loadFields();
+loadStartups();
+</script>
+{% endblock %}
