@@ -8,7 +8,7 @@ A simple, reliable web platform for Startupbootcamp members to share and discove
 - **Startup Profiles** - Create and manage your startup with detailed information
 - **Ownership Model** - Only startup owners (and admins) can edit their startups
 - **Founder Management** - Add founder and co-founder with LinkedIn profiles
-- **Field Tags** - 7 default fields (AI, Education, Sport, Security, Food, Media, Data) + custom fields
+- **Field Tags** - 8 default fields (AI /ML, Education, Sport, Security, Food, Media, Data, Health Care)
 - **Interactive Network Map** - Drag-and-drop visual map with field centroids
 - **Search & Filter** - Find startups by name, description, or field tags
 - **Admin Controls** - Admin can delete any startup and drag any icon
@@ -195,11 +195,10 @@ All data is stored in JSON files:
 - **Goal**: Max 140 characters
 - **Description**: 100-500 characters
 - **Website URL**: Valid URL (optional)
-- **Fields**: Select 1-2 tags
+- **Fields**: Select 1-3 tags
 - **Founder**: Name + LinkedIn URL required
 - **Co-Founder**: Optional, but both name and LinkedIn required if provided
 - **LinkedIn URLs**: Must include "linkedin.com"
-- **Custom Fields**: Max 2 words, case-insensitive deduplication
 - **Logo**: PNG/JPG/WebP only, auto-resized to 512px
 
 ## API Endpoints
@@ -227,22 +226,20 @@ All data is stored in JSON files:
 |--------|----------|-------------|
 | GET | `/api/startups` | List all startups (with optional search/filter) |
 | GET | `/api/fields` | List all field tags |
-| POST | `/api/fields` | Add custom field (login required) |
 | POST | `/api/startups/{id}/position` | Update x,y position (owner/admin only) |
 
 ## Default Fields
 
-The platform comes with 7 predefined fields, each with a distinct color:
+The platform comes with 8 predefined fields, each with a distinct color:
 
-1. **AI** - Blue (#3B82F6)
+1. **AI /ML** - Blue (#3B82F6)
 2. **Education** - Green (#10B981)
 3. **Sport** - Amber (#F59E0B)
 4. **Security** - Red (#EF4444)
 5. **Food** - Purple (#8B5CF6)
 6. **Media** - Pink (#EC4899)
 7. **Data** - Cyan (#06B6D4)
-
-Users can add custom fields (max 2 words each).
+8. **Health Care** - Teal (#14B8A6)
 
 ## Seed Data
 
@@ -375,7 +372,7 @@ rm data/logos/*
 - ✅ Adding/editing requires login
 - ✅ Only owner/admin can edit and drag position
 - ✅ Admin can delete any startup
-- ✅ Default fields: AI, Education, Sport, Security, Food, Media, Data
+- ✅ Default fields: AI /ML, Education, Sport, Security, Food, Media, Data, Health Care
 - ✅ Centroid anchors visible in different colors with labels
 - ✅ network.jpg used as background
 - ✅ Footer year is 2026

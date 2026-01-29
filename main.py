@@ -49,13 +49,14 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 
 # Default fields with colors and centroid positions
 DEFAULT_FIELDS = [
-    {"name": "AI", "color": "#3B82F6", "x": 50, "y": 20},        # Blue
-    {"name": "Education", "color": "#10B981", "x": 85, "y": 35}, # Green
-    {"name": "Sport", "color": "#F59E0B", "x": 85, "y": 65},     # Amber
-    {"name": "Security", "color": "#EF4444", "x": 50, "y": 80},  # Red
-    {"name": "Food", "color": "#8B5CF6", "x": 15, "y": 65},      # Purple
-    {"name": "Media", "color": "#EC4899", "x": 15, "y": 35},     # Pink
-    {"name": "Data", "color": "#06B6D4", "x": 50, "y": 50},      # Cyan
+    {"name": "AI /ML", "color": "#3B82F6", "x": 50, "y": 20},        # Blue
+    {"name": "Education", "color": "#10B981", "x": 85, "y": 35},     # Green
+    {"name": "Sport", "color": "#F59E0B", "x": 85, "y": 65},         # Amber
+    {"name": "Security", "color": "#EF4444", "x": 50, "y": 80},      # Red
+    {"name": "Food", "color": "#8B5CF6", "x": 15, "y": 65},          # Purple
+    {"name": "Media", "color": "#EC4899", "x": 15, "y": 35},         # Pink
+    {"name": "Data", "color": "#06B6D4", "x": 50, "y": 50},          # Cyan
+    {"name": "Health Care", "color": "#14B8A6", "x": 70, "y": 50},   # Teal
 ]
 
 
@@ -263,8 +264,8 @@ def validate_startup_data(data: Dict) -> List[str]:
     fields = data.get('fields', [])
     if not fields or len(fields) < 1:
         errors.append("At least 1 field is required")
-    elif len(fields) > 2:
-        errors.append("Maximum 2 fields allowed")
+    elif len(fields) > 3:
+        errors.append("Maximum 3 fields allowed")
 
     # Founder
     founder_name = data.get('founder_name', '').strip()
@@ -767,36 +768,6 @@ async def api_get_startups(
 async def api_get_fields():
     """Get all fields"""
     return get_fields()
-
-
-@app.post("/api/fields")
-async def api_add_field(
-    request: Request,
-    user: Dict = Depends(require_login),
-    name: str = Form(...)
-):
-    """Add custom field"""
-    name = name.strip()
-
-    # Validate: max 2 words
-    if len(name.split()) > 2:
-        raise HTTPException(status_code=400, detail="Field name must be max 2 words")
-
-    if not name:
-        raise HTTPException(status_code=400, detail="Field name required")
-
-    fields = get_fields()
-
-    # Check if exists (case-insensitive)
-    if any(f['name'].lower() == name.lower() for f in fields):
-        raise HTTPException(status_code=400, detail="Field already exists")
-
-    # Add field with random color and default center position
-    color = f"#{secrets.token_hex(3)}"
-    fields.append({'name': name, 'color': color, 'x': 50, 'y': 50})
-    save_fields(fields)
-
-    return {'name': name, 'color': color, 'x': 50, 'y': 50}
 
 
 @app.post("/api/startups/{startup_id}/position")
