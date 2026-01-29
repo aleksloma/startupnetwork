@@ -801,9 +801,8 @@ async def api_update_position(
     return {'status': 'ok'}
 
 
-@app.post("/api/fields/{field_name}/position")
+@app.post("/api/fields/position")
 async def api_update_field_position(
-    field_name: str,
     request: Request,
     user: Dict = Depends(require_login)
 ):
@@ -812,6 +811,7 @@ async def api_update_field_position(
         raise HTTPException(status_code=403, detail="Admin access required")
 
     data = await request.json()
+    field_name = data.get('name', '')
     x = data.get('x', 0)
     y = data.get('y', 0)
 

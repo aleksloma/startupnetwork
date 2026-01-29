@@ -493,10 +493,10 @@ function makeFieldDraggable(element, field) {
 
             // Save to backend
             try {
-                await fetch(`/api/fields/${encodeURIComponent(field.name)}/position`, {
+                await fetch('/api/fields/position', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ x, y })
+                    body: JSON.stringify({ name: field.name, x, y })
                 });
                 console.log('Saved field position:', field.name, x, y);
             } catch (error) {
